@@ -1,2 +1,5 @@
 {
+  "galgame.dialogue.click_continue": "Click to continue...",
+  "galgame.dialogue.click_close": "Click to close",
+  "galgame.dialogue.history": "Dialogue History (Press H to close)"
 }
