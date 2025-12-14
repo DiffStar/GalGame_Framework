@@ -112,6 +112,8 @@ class DialogueScreen(
         StatisticsManager.update(deltaTime)
         AchievementNotification.update(deltaTime)
         AchievementManager.checkAchievements()
+        net.star.galgame.world.scene.SceneManager.update(deltaTime)
+        net.star.galgame.world.scene.transition.SceneTransition.update(deltaTime)
         
         if (currentTime - lastAutoSaveTime >= autoSaveInterval) {
             SaveManager.autoSave(script.id, controller)
@@ -706,6 +708,7 @@ class DialogueScreen(
     override fun onClose() {
         audioManager.stopAll()
         StatisticsManager.stopGame()
+        net.star.galgame.world.scene.SceneManager.resetCamera()
         super.onClose()
     }
 }
