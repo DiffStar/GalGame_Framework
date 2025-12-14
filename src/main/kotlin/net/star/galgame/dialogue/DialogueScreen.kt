@@ -23,6 +23,7 @@ import net.star.galgame.dialogue.visual.AnimationManager
 import net.star.galgame.dialogue.visual.AnimationType
 import net.star.galgame.dialogue.visual.UIRenderer
 import net.star.galgame.dialogue.visual.UITheme
+import net.star.galgame.dialogue.audio.AudioManager
 import org.lwjgl.glfw.GLFW
 
 class DialogueScreen(
@@ -44,6 +45,7 @@ class DialogueScreen(
     private val themeManager = ThemeManager()
     private val animationManager = AnimationManager()
     private val uiRenderer = UIRenderer()
+    private val audioManager = AudioManager()
     private var dialogueBoxAnimation: net.star.galgame.dialogue.visual.UIAnimation? = null
     private var nameBoxAnimation: net.star.galgame.dialogue.visual.UIAnimation? = null
     
@@ -84,6 +86,8 @@ class DialogueScreen(
 
         dialogueBoxAnimation?.start()
         nameBoxAnimation?.start()
+
+        audioManager.se.playSceneChange(ResourceLocation.parse("galgame:scene_change"))
     }
 
     override fun render(graphics: GuiGraphics, mouseX: Int, mouseY: Int, partialTick: Float) {
@@ -95,6 +99,7 @@ class DialogueScreen(
         
         backgroundManager.update(deltaTime)
         animationManager.update(deltaTime)
+        audioManager.update(deltaTime)
         
         if (currentTime - lastAutoSaveTime >= autoSaveInterval) {
             SaveManager.autoSave(script.id, controller)
@@ -270,6 +275,19 @@ class DialogueScreen(
                 screenWidth - font.width(continueText) - padding,
                 continueY,
                 font.width(continueText)
+            )
+        }
+
+        val voiceSubtitle = audioManager.voice.getSubtitle()
+        if (voiceSubtitle != null) {
+            val subtitleY = dialogueBoxY - 40
+            graphics.drawString(
+                font,
+                voiceSubtitle,
+                padding + 10,
+                subtitleY,
+                0xFFFFFF,
+                false
             )
         }
     }
@@ -484,6 +502,7 @@ class DialogueScreen(
                     return true
                 }
             } else if (typewriter.isComplete) {
+                audioManager.se.playClick(ResourceLocation.parse("galgame:click"))
                 if (controller.next()) {
                     updateCurrentDialogue()
                 } else {
@@ -491,6 +510,9 @@ class DialogueScreen(
                 }
             } else {
                 typewriter.skip()
+                if (audioManager.voice.isPlaying()) {
+                    audioManager.voice.skip()
+                }
             }
             return true
         }
@@ -499,6 +521,7 @@ class DialogueScreen(
     }
 
     private fun handleChoiceSelection(choiceIndex: Int) {
+        audioManager.se.playChoice(ResourceLocation.parse("galgame:choice"))
         if (controller.selectChoice(choiceIndex)) {
             updateCurrentDialogue()
             choiceRenderer.reset()
@@ -514,5 +537,10 @@ class DialogueScreen(
     }
 
     override fun isPauseScreen(): Boolean = false
+
+    override fun onClose() {
+        audioManager.stopAll()
+        super.onClose()
+    }
 }
 
