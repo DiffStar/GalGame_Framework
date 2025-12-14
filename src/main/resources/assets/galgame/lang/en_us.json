@@ -1,13 +1,2 @@
 {
-  "itemGroup.galgame": "Example Mod Tab",
-  "block.galgame.example_block": "Example Block",
-  "item.galgame.example_item": "Example Item",
-
-  "galgame.configuration.title": "GalGame Framework Configs",
-  "galgame.configuration.section.galgame.common.toml": "GalGame Framework Configs",
-  "galgame.configuration.section.galgame.common.toml.title": "GalGame Framework Configs",
-  "galgame.configuration.items": "Item List",
-  "galgame.configuration.logDirtBlock": "Log Dirt Block",
-  "galgame.configuration.magicNumberIntroduction": "Magic Number Text",
-  "galgame.configuration.magicNumber": "Magic Number"
 }
