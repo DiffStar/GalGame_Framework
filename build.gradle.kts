@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     `java-library`
     `maven-publish`
@@ -135,7 +137,8 @@ tasks.withType<JavaCompile>().configureEach {
 
 tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
     compilerOptions {
-        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21)
+        jvmTarget.set(JvmTarget.JVM_21)
+        incremental.and(false) // 禁用增量编译以减少会话文件生成
     }
 }
 
@@ -144,5 +147,11 @@ idea {
         isDownloadSources = true
         isDownloadJavadoc = true
     }
+}
+
+// 清理 Kotlin 编译器会话文件的任务
+tasks.register("cleanKotlinSessions", Delete::class) {
+    description = "清理 Kotlin 编译器生成的会话文件"
+    delete(".kotlin")
 }
 
