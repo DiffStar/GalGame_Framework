@@ -12,7 +12,6 @@ import net.star.galgame.GalGameFramework
 @EventBusSubscriber(modid = GalGameFramework.MODID, value = [Dist.CLIENT])
 class GalGameFrameworkClient(container: ModContainer) {
     init {
-        // Client initialization
     }
 
     companion object {

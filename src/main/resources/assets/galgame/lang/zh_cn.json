@@ -1,6 +1,8 @@
 {
   "galgame.dialogue.click_continue": "点击继续...",
   "galgame.dialogue.click_close": "点击关闭",
-  "galgame.dialogue.history": "对话历史 (按H关闭)"
+  "galgame.dialogue.history": "对话历史 (按H关闭)",
+  "key.galgame.dev_tools": "打开开发工具",
+  "key.categories.galgame": "GalGame"
 }
 

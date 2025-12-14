@@ -1,5 +1,7 @@
 {
   "galgame.dialogue.click_continue": "Click to continue...",
   "galgame.dialogue.click_close": "Click to close",
-  "galgame.dialogue.history": "Dialogue History (Press H to close)"
+  "galgame.dialogue.history": "Dialogue History (Press H to close)",
+  "key.galgame.dev_tools": "Open Dev Tools",
+  "key.categories.galgame": "GalGame"
 }

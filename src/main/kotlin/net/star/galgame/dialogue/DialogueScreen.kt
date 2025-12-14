@@ -31,10 +31,10 @@ import net.star.galgame.dialogue.statistics.StatisticsManager
 import org.lwjgl.glfw.GLFW
 
 class DialogueScreen(
-    private val script: DialogueScript,
+    val script: DialogueScript,
     controller: DialogueController? = null
 ) : Screen(Component.literal("Dialogue")) {
-    private val controller = controller ?: DialogueController(script)
+    val controller = controller ?: DialogueController(script)
     private val typewriter = TypewriterEffect("", 0.03f)
     private val characterRenderers = mutableMapOf<String, CharacterRenderer>()
     private val choiceRenderer = ChoiceRenderer()
