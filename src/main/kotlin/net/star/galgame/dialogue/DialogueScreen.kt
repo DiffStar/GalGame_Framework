@@ -13,6 +13,7 @@ import net.star.galgame.dialogue.i18n.I18nHelper
 import net.star.galgame.dialogue.save.SaveManager
 import net.star.galgame.dialogue.save.SaveScreen
 import net.star.galgame.dialogue.save.LoadScreen
+import net.star.galgame.dialogue.menu.SettingsScreen
 import net.star.galgame.dialogue.text.TextRenderer
 import net.star.galgame.dialogue.text.TypewriterEffect
 import net.star.galgame.dialogue.visual.BackgroundManager
@@ -43,6 +44,7 @@ class DialogueScreen(
 
     private var lastAutoSaveTime = System.currentTimeMillis()
     private val autoSaveInterval = 30000L
+    private var showingQuickMenu = false
 
     private val backgroundManager = BackgroundManager()
     private val themeManager = ThemeManager()
@@ -118,8 +120,12 @@ class DialogueScreen(
 
         if (showingHistory) {
             renderHistory(graphics, mouseX, mouseY)
+        } else if (showingQuickMenu) {
+            renderDialogue(graphics, mouseX, mouseY, deltaTime)
+            renderQuickMenu(graphics, mouseX, mouseY)
         } else {
             renderDialogue(graphics, mouseX, mouseY, deltaTime)
+            renderQuickMenuButton(graphics, mouseX, mouseY)
             if (controller.hasChoices() && typewriter.isComplete) {
                 val choices = controller.getVisibleChoices()
                 val screenWidth = width
@@ -365,6 +371,91 @@ class DialogueScreen(
         }
     }
 
+    private fun renderQuickMenuButton(graphics: GuiGraphics, mouseX: Int, mouseY: Int) {
+        val buttonSize = 30
+        val buttonX = width - buttonSize - 10
+        val buttonY = 10
+        val isHovered = mouseX >= buttonX && mouseX <= buttonX + buttonSize &&
+                mouseY >= buttonY && mouseY <= buttonY + buttonSize
+
+        val bgColor = if (isHovered) 0xCC000000.toInt() else 0x80000000.toInt()
+        graphics.fill(buttonX, buttonY, buttonX + buttonSize, buttonY + buttonSize, bgColor)
+        graphics.fill(buttonX, buttonY, buttonX + buttonSize, buttonY + 2, 0xFFFFFFFF.toInt())
+        graphics.fill(buttonX, buttonY + buttonSize - 2, buttonX + buttonSize, buttonY + buttonSize, 0xFFFFFFFF.toInt())
+        graphics.fill(buttonX, buttonY, buttonX + 2, buttonY + buttonSize, 0xFFFFFFFF.toInt())
+        graphics.fill(buttonX + buttonSize - 2, buttonY, buttonX + buttonSize, buttonY + buttonSize, 0xFFFFFFFF.toInt())
+
+        val menuText = "☰"
+        val textX = buttonX + buttonSize / 2 - font.width(menuText) / 2
+        val textY = buttonY + buttonSize / 2 - font.lineHeight / 2
+        graphics.drawString(font, menuText, textX, textY, 0xFFFFFF, false)
+    }
+
+    private fun renderQuickMenu(graphics: GuiGraphics, mouseX: Int, mouseY: Int) {
+        graphics.fill(0, 0, width, height, 0xE0000000.toInt())
+
+        val menuWidth = 200
+        val menuHeight = 200
+        val menuX = width / 2 - menuWidth / 2
+        val menuY = height / 2 - menuHeight / 2
+
+        graphics.fill(menuX, menuY, menuX + menuWidth, menuY + menuHeight, 0xFF2C2C2C.toInt())
+        graphics.fill(menuX, menuY, menuX + menuWidth, menuY + 2, 0xFFFFFFFF.toInt())
+        graphics.fill(menuX, menuY + menuHeight - 2, menuX + menuWidth, menuY + menuHeight, 0xFFFFFFFF.toInt())
+        graphics.fill(menuX, menuY, menuX + 2, menuY + menuHeight, 0xFFFFFFFF.toInt())
+        graphics.fill(menuX + menuWidth - 2, menuY, menuX + menuWidth, menuY + menuHeight, 0xFFFFFFFF.toInt())
+
+        val title = Component.literal("快捷菜单")
+        graphics.drawString(font, title, menuX + menuWidth / 2 - font.width(title) / 2, menuY + 15, 0xFFFFFF, false)
+
+        val buttonHeight = 30
+        val buttonSpacing = 5
+        var currentY = menuY + 40
+
+        val buttons = listOf(
+            Pair("存档 (F5)") { openSaveScreen() },
+            Pair("读档 (F9)") { openLoadScreen() },
+            Pair("设置") { openSettings() },
+            Pair("返回游戏") { showingQuickMenu = false }
+        )
+
+        for ((text, action) in buttons) {
+            val isHovered = mouseX >= menuX + 10 && mouseX <= menuX + menuWidth - 10 &&
+                    mouseY >= currentY && mouseY <= currentY + buttonHeight
+            val bgColor = if (isHovered) 0xFF4A90E2.toInt() else 0xFF3C3C3C.toInt()
+            graphics.fill(menuX + 10, currentY, menuX + menuWidth - 10, currentY + buttonHeight, bgColor)
+            graphics.drawString(font, text, menuX + menuWidth / 2 - font.width(text) / 2,
+                currentY + buttonHeight / 2 - font.lineHeight / 2, 0xFFFFFF, false)
+            currentY += buttonHeight + buttonSpacing
+        }
+    }
+
+    private fun openSaveScreen() {
+        minecraft?.setScreen(SaveScreen(script.id, controller) {
+            minecraft?.setScreen(this@DialogueScreen)
+        })
+        showingQuickMenu = false
+    }
+
+    private fun openLoadScreen() {
+        minecraft?.setScreen(LoadScreen(
+            onLoadComplete = { loadedScreen ->
+                minecraft?.setScreen(loadedScreen)
+            },
+            onCancel = {
+                minecraft?.setScreen(this@DialogueScreen)
+            }
+        ))
+        showingQuickMenu = false
+    }
+
+    private fun openSettings() {
+        minecraft?.setScreen(SettingsScreen {
+            minecraft?.setScreen(this@DialogueScreen)
+        })
+        showingQuickMenu = false
+    }
+
     override fun keyPressed(event: KeyEvent): Boolean {
         val keyCode = event.key
         if (showingHistory) {
@@ -441,8 +532,16 @@ class DialogueScreen(
                 return true
             }
             GLFW.GLFW_KEY_H -> {
-                showingHistory = true
-                historyScrollOffset = 0
+                if (showingQuickMenu) {
+                    showingQuickMenu = false
+                } else {
+                    showingHistory = true
+                    historyScrollOffset = 0
+                }
+                return true
+            }
+            GLFW.GLFW_KEY_M -> {
+                showingQuickMenu = !showingQuickMenu
                 return true
             }
             GLFW.GLFW_KEY_S -> {
@@ -488,6 +587,58 @@ class DialogueScreen(
     override fun mouseClicked(event: MouseButtonEvent, captured: Boolean): Boolean {
         if (showingHistory) {
             return super.mouseClicked(event, captured)
+        }
+
+        if (showingQuickMenu) {
+            val menuWidth = 200
+            val menuHeight = 200
+            val menuX = width / 2 - menuWidth / 2
+            val menuY = height / 2 - menuHeight / 2
+
+            if (event.button() == 0) {
+                val mouseX = event.x().toInt()
+                val mouseY = event.y().toInt()
+
+                if (mouseX < menuX || mouseX > menuX + menuWidth ||
+                    mouseY < menuY || mouseY > menuY + menuHeight) {
+                    showingQuickMenu = false
+                    return true
+                }
+
+                val buttonHeight = 30
+                val buttonSpacing = 5
+                var currentY = menuY + 40
+
+                val buttons = listOf(
+                    { openSaveScreen() },
+                    { openLoadScreen() },
+                    { openSettings() },
+                    { showingQuickMenu = false }
+                )
+
+                for (action in buttons) {
+                    if (mouseY >= currentY && mouseY <= currentY + buttonHeight) {
+                        action()
+                        return true
+                    }
+                    currentY += buttonHeight + buttonSpacing
+                }
+            }
+            return true
+        }
+
+        if (event.button() == 0) {
+            val buttonSize = 30
+            val buttonX = width - buttonSize - 10
+            val buttonY = 10
+            val mouseX = event.x().toInt()
+            val mouseY = event.y().toInt()
+
+            if (mouseX >= buttonX && mouseX <= buttonX + buttonSize &&
+                mouseY >= buttonY && mouseY <= buttonY + buttonSize) {
+                showingQuickMenu = true
+                return true
+            }
         }
 
         if (event.button() == 0) {

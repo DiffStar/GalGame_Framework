@@ -28,6 +28,10 @@ object DialogueManager {
         return scripts[id]
     }
 
+    fun getAllScripts(): List<DialogueScript> {
+        return scripts.values.toList()
+    }
+
     fun createCharacter(
         id: String,
         name: Component,
