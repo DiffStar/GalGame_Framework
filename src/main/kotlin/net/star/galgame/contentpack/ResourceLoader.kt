@@ -16,12 +16,20 @@ object ResourceLoader {
     private val imageCache = ConcurrentHashMap<String, BufferedImage>()
     private val audioCache = ConcurrentHashMap<String, ResourceLocation>()
     private val resourcePaths = ConcurrentHashMap<String, Path>()
-    private val preloadQueue = mutableListOf<String>()
+    private val preloadQueue = mutableListOf<PreloadTask>()
+    private val preloadPriority = ConcurrentHashMap<String, Int>()
     private val lock = ReentrantReadWriteLock()
     private val executor: ExecutorService = Executors.newFixedThreadPool(4)
+    private var isPreloading = false
     
     private val imageExtensions = setOf("png", "jpg", "jpeg", "webp")
     private val audioExtensions = setOf("ogg", "mp3", "wav")
+    
+    private data class PreloadTask(
+        val key: String,
+        val priority: Int,
+        val resourceType: String
+    )
     
     fun registerPackResources(packId: String, packPath: Path, resources: ResourceStructure) {
         lock.write {
@@ -100,19 +108,59 @@ object ResourceLoader {
         }
     }
     
-    fun preloadResources(packId: String, resourceType: String? = null) {
-        lock.read {
+    fun preloadResources(packId: String, resourceType: String? = null, priority: Int = 0) {
+        lock.write {
             val keys = if (resourceType != null) {
                 resourcePaths.keys.filter { it.startsWith("$packId:") && it.contains("/$resourceType/") }
             } else {
                 resourcePaths.keys.filter { it.startsWith("$packId:") }
             }
             
-            preloadQueue.addAll(keys)
+            keys.forEach { key ->
+                val type = when {
+                    imageExtensions.any { key.endsWith(".$it", ignoreCase = true) } -> "image"
+                    audioExtensions.any { key.endsWith(".$it", ignoreCase = true) } -> "audio"
+                    else -> "unknown"
+                }
+                preloadQueue.add(PreloadTask(key, priority, type))
+                preloadPriority[key] = priority
+            }
+            
+            preloadQueue.sortByDescending { it.priority }
         }
         
-        executor.submit {
-            processPreloadQueue()
+        if (!isPreloading) {
+            executor.submit {
+                processPreloadQueue()
+            }
+        }
+    }
+    
+    fun preloadResource(packId: String, resourcePath: String, priority: Int = 10) {
+        val key = "$packId:$resourcePath"
+        lock.write {
+            if (resourcePaths.containsKey(key)) {
+                val type = when {
+                    imageExtensions.any { resourcePath.endsWith(".$it", ignoreCase = true) } -> "image"
+                    audioExtensions.any { resourcePath.endsWith(".$it", ignoreCase = true) } -> "audio"
+                    else -> "unknown"
+                }
+                preloadQueue.add(PreloadTask(key, priority, type))
+                preloadPriority[key] = priority
+                preloadQueue.sortByDescending { it.priority }
+            }
+        }
+        
+        if (!isPreloading) {
+            executor.submit {
+                processPreloadQueue()
+            }
+        }
+    }
+    
+    fun preloadCriticalResources(packId: String, resourcePaths: List<String>) {
+        resourcePaths.forEachIndexed { index, path ->
+            preloadResource(packId, path, priority = 100 - index)
         }
     }
     
@@ -161,39 +209,61 @@ object ResourceLoader {
     }
     
     private fun processPreloadQueue() {
-        while (preloadQueue.isNotEmpty()) {
-            val key = lock.write {
-                if (preloadQueue.isEmpty()) return
-                preloadQueue.removeAt(0)
-            } ?: continue
-            
-            val (packId, resourcePath) = key.split(":", limit = 2)
-            val filePath = resourcePaths[key] ?: continue
-            
-            when {
-                imageExtensions.any { resourcePath.endsWith(".$it", ignoreCase = true) } -> {
-                    if (!imageCache.containsKey(key)) {
-                        try {
-                            val image = ImageIO.read(filePath.toFile())
-                            lock.write {
-                                imageCache[key] = image
+        isPreloading = true
+        try {
+            while (true) {
+                val task = lock.write {
+                    if (preloadQueue.isEmpty()) {
+                        isPreloading = false
+                        return
+                    }
+                    preloadQueue.removeAt(0)
+                } ?: continue
+                
+                val key = task.key
+                val (packId, resourcePath) = key.split(":", limit = 2)
+                val filePath = resourcePaths[key] ?: continue
+                
+                when (task.resourceType) {
+                    "image" -> {
+                        if (!imageCache.containsKey(key)) {
+                            try {
+                                val image = ImageIO.read(filePath.toFile())
+                                lock.write {
+                                    imageCache[key] = image
+                                }
+                            } catch (e: Exception) {
                             }
-                        } catch (e: Exception) {
                         }
                     }
-                }
-                audioExtensions.any { resourcePath.endsWith(".$it", ignoreCase = true) } -> {
-                    if (!audioCache.containsKey(key)) {
-                        try {
-                            val location = ResourceLocation.parse("${packId}:${resourcePath.replace("\\", "/")}")
-                            lock.write {
-                                audioCache[key] = location
+                    "audio" -> {
+                        if (!audioCache.containsKey(key)) {
+                            try {
+                                val location = ResourceLocation.parse("${packId}:${resourcePath.replace("\\", "/")}")
+                                lock.write {
+                                    audioCache[key] = location
+                                }
+                            } catch (e: Exception) {
                             }
-                        } catch (e: Exception) {
                         }
                     }
                 }
             }
+        } finally {
+            isPreloading = false
+        }
+    }
+    
+    fun clearPreloadQueue() {
+        lock.write {
+            preloadQueue.clear()
+            preloadPriority.clear()
+        }
+    }
+    
+    fun getPreloadQueueSize(): Int {
+        return lock.read {
+            preloadQueue.size
         }
     }
     

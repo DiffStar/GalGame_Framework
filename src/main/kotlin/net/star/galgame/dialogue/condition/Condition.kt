@@ -25,12 +25,18 @@ sealed class Condition {
 
         private fun compareNumbers(a: VariableValue, b: VariableValue, op: (Double, Double) -> Boolean): Boolean {
             val numA = when (a) {
+                is VariableValue.Integer -> a.value.toDouble()
+                is VariableValue.Long -> a.value.toDouble()
+                is VariableValue.Float -> a.value.toDouble()
                 is VariableValue.Number -> a.value
                 is VariableValue.String -> a.value.toDoubleOrNull()
                 is VariableValue.Boolean -> if (a.value) 1.0 else 0.0
             } ?: return false
 
             val numB = when (b) {
+                is VariableValue.Integer -> b.value.toDouble()
+                is VariableValue.Long -> b.value.toDouble()
+                is VariableValue.Float -> b.value.toDouble()
                 is VariableValue.Number -> b.value
                 is VariableValue.String -> b.value.toDoubleOrNull()
                 is VariableValue.Boolean -> if (b.value) 1.0 else 0.0

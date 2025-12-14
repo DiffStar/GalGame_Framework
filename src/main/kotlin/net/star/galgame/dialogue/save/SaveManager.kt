@@ -4,6 +4,7 @@ import net.minecraft.client.Minecraft
 import net.star.galgame.dialogue.DialogueEntry
 import net.star.galgame.dialogue.control.DialogueController
 import net.star.galgame.dialogue.variable.VariableManager
+import net.star.galgame.dialogue.state.GameStateManager
 import java.io.*
 import java.nio.file.Files
 import java.nio.file.StandardOpenOption
@@ -41,23 +42,41 @@ object SaveManager {
                 )
             }
             
-            val serializableVariables = VariableManager.getAll().mapValues { (_, value) ->
-                when (value) {
-                    is net.star.galgame.dialogue.variable.VariableValue.Number -> 
-                        SerializableVariableValue.Number(value.value)
-                    is net.star.galgame.dialogue.variable.VariableValue.Boolean -> 
-                        SerializableVariableValue.Boolean(value.value)
-                    is net.star.galgame.dialogue.variable.VariableValue.String -> 
-                        SerializableVariableValue.String(value.value)
-                }
+            val serializableGlobalVariables = VariableManager.getAllGlobal().mapValues { (_, value) ->
+                serializeVariableValue(value)
             }
+            
+            val localScopes = mutableMapOf<String, Map<String, SerializableVariableValue>>()
+            val gameState = GameStateManager.getState()
+            val serializableGameState = net.star.galgame.dialogue.save.SerializableGameState(
+                currentScene = gameState.currentScene,
+                currentChapter = gameState.currentChapter,
+                readFlags = gameState.readFlags,
+                achievements = gameState.achievements.mapValues { (_, progress) ->
+                    net.star.galgame.dialogue.save.SerializableAchievementProgress(
+                        isUnlocked = progress.isUnlocked,
+                        unlockTime = progress.unlockTime,
+                        progress = progress.progress
+                    )
+                },
+                statistics = gameState.statistics,
+                sceneHistory = gameState.sceneHistory.map { record ->
+                    net.star.galgame.dialogue.save.SerializableSceneRecord(
+                        sceneId = record.sceneId,
+                        timestamp = record.timestamp,
+                        action = record.action.name
+                    )
+                }
+            )
             
             val saveData = SaveData(
                 slotId = slotId,
                 scriptId = scriptId,
                 currentIndex = getCurrentIndex(controller),
                 history = serializableHistory,
-                variables = serializableVariables,
+                globalVariables = serializableGlobalVariables,
+                localVariables = localScopes,
+                gameState = serializableGameState,
                 timestamp = System.currentTimeMillis(),
                 worldName = worldName,
                 progress = progress,
@@ -120,17 +139,43 @@ object SaveManager {
     }
     
     fun applySaveData(saveData: SaveData, controller: DialogueController) {
-        VariableManager.clear()
-        saveData.variables.forEach { (name, value) ->
-            when (value) {
-                is SerializableVariableValue.Number -> 
-                    VariableManager.set(name, value.value)
-                is SerializableVariableValue.Boolean -> 
-                    VariableManager.set(name, value.value)
-                is SerializableVariableValue.String -> 
-                    VariableManager.set(name, value.value)
+        VariableManager.clearGlobal()
+        saveData.globalVariables.forEach { (name, value) ->
+            deserializeVariableValue(name, value)?.let { (varName, varValue) ->
+                VariableManager.setGlobal(varName, varValue)
             }
         }
+        
+        saveData.localVariables.forEach { (scope, variables) ->
+            variables.forEach { (name, value) ->
+                deserializeVariableValue(name, value)?.let { (varName, varValue) ->
+                    VariableManager.setLocal(scope, varName, varValue)
+                }
+            }
+        }
+        
+        val gameState = net.star.galgame.dialogue.state.GameState(
+            currentScene = saveData.gameState.currentScene,
+            currentChapter = saveData.gameState.currentChapter,
+            readFlags = saveData.gameState.readFlags,
+            achievements = saveData.gameState.achievements.mapValues { (_, progress) ->
+                net.star.galgame.dialogue.state.AchievementProgress(
+                    isUnlocked = progress.isUnlocked,
+                    unlockTime = progress.unlockTime
+                ).apply {
+                    this.progress = progress.progress
+                }
+            },
+            statistics = saveData.gameState.statistics,
+            sceneHistory = saveData.gameState.sceneHistory.map { record ->
+                net.star.galgame.dialogue.state.SceneRecord(
+                    sceneId = record.sceneId,
+                    timestamp = record.timestamp,
+                    action = net.star.galgame.dialogue.state.SceneAction.valueOf(record.action)
+                )
+            }
+        )
+        GameStateManager.applyState(gameState)
         
         controller.reset()
         controller.setCurrentIndex(saveData.currentIndex)
@@ -138,6 +183,7 @@ object SaveManager {
         val script = net.star.galgame.dialogue.DialogueManager.getScript(saveData.scriptId) ?: return
         val historyField = DialogueController::class.java.getDeclaredField("history")
         historyField.isAccessible = true
+        @Suppress("UNCHECKED_CAST")
         val history = historyField.get(controller) as? MutableList<net.star.galgame.dialogue.DialogueEntry>
         history?.clear()
         
@@ -152,6 +198,35 @@ object SaveManager {
                 history?.add(restoredEntry)
             }
         }
+    }
+    
+    private fun serializeVariableValue(value: net.star.galgame.dialogue.variable.VariableValue): SerializableVariableValue {
+        return when (value) {
+            is net.star.galgame.dialogue.variable.VariableValue.Integer -> 
+                SerializableVariableValue.Integer(value.value)
+            is net.star.galgame.dialogue.variable.VariableValue.Long -> 
+                SerializableVariableValue.Long(value.value)
+            is net.star.galgame.dialogue.variable.VariableValue.Float -> 
+                SerializableVariableValue.Float(value.value)
+            is net.star.galgame.dialogue.variable.VariableValue.Number -> 
+                SerializableVariableValue.Number(value.value)
+            is net.star.galgame.dialogue.variable.VariableValue.Boolean -> 
+                SerializableVariableValue.Boolean(value.value)
+            is net.star.galgame.dialogue.variable.VariableValue.String -> 
+                SerializableVariableValue.String(value.value)
+        }
+    }
+    
+    private fun deserializeVariableValue(name: String, value: SerializableVariableValue): Pair<String, Any>? {
+        val actualValue = when (value) {
+            is SerializableVariableValue.Integer -> value.value
+            is SerializableVariableValue.Long -> value.value
+            is SerializableVariableValue.Float -> value.value
+            is SerializableVariableValue.Number -> value.value
+            is SerializableVariableValue.Boolean -> value.value
+            is SerializableVariableValue.String -> value.value
+        }
+        return Pair(name, actualValue)
     }
     
     fun getSaveSlot(slotId: Int): SaveSlot {
