@@ -23,48 +23,49 @@ data class BackgroundConfig(
 class BackgroundManager {
     private var currentBackground: BackgroundConfig? = null
     private var nextBackground: BackgroundConfig? = null
-    private var transitionProgress = 1f
-    private var transitionDuration = 0.5f
+    private var transitionAnimation: TransitionAnimation? = null
     private var animationTime = 0f
-    private var isTransitioning = false
+    private var screenWidth = 0
+    private var screenHeight = 0
 
-    fun setBackground(config: BackgroundConfig, duration: Float = 0.5f) {
+    fun setBackground(config: BackgroundConfig, transitionType: TransitionType = TransitionType.FADE, duration: Float = 0.5f) {
         if (currentBackground == null) {
             currentBackground = config
-            transitionProgress = 1f
-            isTransitioning = false
         } else {
             nextBackground = config
-            transitionProgress = 0f
-            transitionDuration = duration
-            isTransitioning = true
+            transitionAnimation = TransitionAnimation(transitionType, duration)
+            transitionAnimation?.start()
         }
     }
 
     fun update(deltaTime: Float) {
         animationTime += deltaTime
-
-        if (isTransitioning) {
-            transitionProgress += deltaTime / transitionDuration
-            if (transitionProgress >= 1f) {
-                transitionProgress = 1f
-                currentBackground = nextBackground
-                nextBackground = null
-                isTransitioning = false
-            }
+        transitionAnimation?.update(deltaTime)
+        if (transitionAnimation?.isComplete() == true && nextBackground != null) {
+            currentBackground = nextBackground
+            nextBackground = null
+            transitionAnimation = null
         }
     }
 
     fun render(graphics: GuiGraphics, width: Int, height: Int) {
+        screenWidth = width
+        screenHeight = height
         val current = currentBackground
         if (current == null) {
             graphics.fill(0, 0, width, height, 0xFF000000.toInt())
             return
         }
 
-        if (isTransitioning && nextBackground != null) {
-            renderBackgroundLayer(graphics, current, width, height, 1f - transitionProgress)
-            renderBackgroundLayer(graphics, nextBackground!!, width, height, transitionProgress)
+        val transition = transitionAnimation
+        if (transition != null && transition.isActive() && nextBackground != null) {
+            transition.renderTransition(
+                graphics,
+                width,
+                height,
+                { renderBackgroundLayer(it, current, width, height, 1f) },
+                { renderBackgroundLayer(it, nextBackground!!, width, height, 1f) }
+            )
         } else {
             renderBackgroundLayer(graphics, current, width, height, 1f)
         }
@@ -78,12 +79,6 @@ class BackgroundManager {
         alpha: Float
     ) {
         val texture = config.texture ?: return
-
-        val brightness = config.brightness * alpha
-        val color = ((brightness * 255).toInt() shl 16) or
-                   ((brightness * 255).toInt() shl 8) or
-                   (brightness * 255).toInt() or
-                   ((alpha * 255).toInt() shl 24)
 
         when (config.type) {
             BackgroundType.STATIC -> {
@@ -103,6 +98,6 @@ class BackgroundManager {
     }
 
     fun getCurrentBackground(): BackgroundConfig? = currentBackground
-    fun isTransitioning(): Boolean = isTransitioning
+    fun isTransitioning(): Boolean = transitionAnimation?.isActive() ?: false
 }
 

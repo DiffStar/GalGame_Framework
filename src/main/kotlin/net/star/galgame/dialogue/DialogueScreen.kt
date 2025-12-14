@@ -160,7 +160,7 @@ class DialogueScreen(
         } else null
 
         typewriter.update(deltaTime)
-        characterRenderers.values.forEach { it.updateFade() }
+        characterRenderers.values.forEach { it.updateAnimation(deltaTime) }
         choiceRenderer.update(deltaTime)
 
         val screenWidth = width

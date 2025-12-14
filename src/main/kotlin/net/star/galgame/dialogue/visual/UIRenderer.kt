@@ -18,28 +18,31 @@ class UIRenderer {
         val offsetX = animation?.getOffsetX(width) ?: 0
         val offsetY = animation?.getOffsetY(height) ?: 0
         val alpha = animation?.getAlpha() ?: 1f
+        val scale = animation?.getScale() ?: 1f
 
-        val actualX = x + offsetX
-        val actualY = y + offsetY
+        val scaledWidth = (width * scale).toInt()
+        val scaledHeight = (height * scale).toInt()
+        val actualX = x + offsetX + (width - scaledWidth) / 2
+        val actualY = y + offsetY + (height - scaledHeight) / 2
 
         val bgAlpha = ((style.backgroundColor shr 24) and 0xFF) / 255f * alpha
         val bgColor = ((bgAlpha * 255).toInt() shl 24) or (style.backgroundColor and 0x00FFFFFF)
 
         if (style.cornerRadius > 0) {
-            renderRoundedBox(graphics, actualX, actualY, width, height, style.cornerRadius, bgColor)
+            renderRoundedBox(graphics, actualX, actualY, scaledWidth, scaledHeight, style.cornerRadius, bgColor)
         } else {
-            graphics.fill(actualX, actualY, actualX + width, actualY + height, bgColor)
+            graphics.fill(actualX, actualY, actualX + scaledWidth, actualY + scaledHeight, bgColor)
         }
 
         if (style.borderThickness > 0) {
             val borderAlpha = ((style.borderColor shr 24) and 0xFF) / 255f * alpha
             val borderColor = ((borderAlpha * 255).toInt() shl 24) or (style.borderColor and 0x00FFFFFF)
-            renderBorder(graphics, actualX, actualY, width, height, style.borderThickness, borderColor)
+            renderBorder(graphics, actualX, actualY, scaledWidth, scaledHeight, style.borderThickness, borderColor)
         }
 
         if (style.blur > 0f) {
             val blurAlpha = (style.blur * alpha * 0.2f).coerceIn(0f, 1f)
-            graphics.fill(actualX, actualY, actualX + width, actualY + height, ((blurAlpha * 255).toInt() shl 24) or 0x000000)
+            graphics.fill(actualX, actualY, actualX + scaledWidth, actualY + scaledHeight, ((blurAlpha * 255).toInt() shl 24) or 0x000000)
         }
     }
 
