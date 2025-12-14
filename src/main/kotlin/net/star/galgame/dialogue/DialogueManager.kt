@@ -19,6 +19,10 @@ object DialogueManager {
     fun registerScript(script: DialogueScript) {
         scripts[script.id] = script
     }
+    
+    fun unregisterScript(scriptId: String) {
+        scripts.remove(scriptId)
+    }
 
     fun getScript(id: String): DialogueScript? {
         return scripts[id]

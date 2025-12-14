@@ -13,6 +13,7 @@ import kotlin.concurrent.write
 object ContentPackManager {
     private val loadedPacks = ConcurrentHashMap<String, ContentPack>()
     private val packPaths = ConcurrentHashMap<String, Path>()
+    private val enabledPacks = ConcurrentHashMap<String, Boolean>()
     private val loadingQueue = mutableListOf<Path>()
     private val loader = ContentPackLoader()
     private val parser = ScriptParser()
@@ -67,10 +68,13 @@ object ContentPackManager {
                 return@write pack.copy(loadErrors = dependencyCheck.missingDependencies.map { "缺少依赖: $it" })
             }
             
-            initializePack(pack)
+            if (isPackEnabled(pack.manifest.id)) {
+                initializePack(pack)
+            }
             
             loadedPacks[pack.manifest.id] = pack
             packPaths[pack.manifest.id] = packPath
+            enabledPacks[pack.manifest.id] = true
             pack
         }
     }
@@ -92,6 +96,113 @@ object ContentPackManager {
     fun getAllPacks(): Map<String, ContentPack> {
         return lock.read {
             loadedPacks.toMap()
+        }
+    }
+    
+    fun isPackEnabled(packId: String): Boolean {
+        return lock.read {
+            enabledPacks[packId] ?: true
+        }
+    }
+    
+    fun setPackEnabled(packId: String, enabled: Boolean) {
+        lock.write {
+            enabledPacks[packId] = enabled
+            val pack = loadedPacks[packId] ?: return@write
+            if (enabled) {
+                initializePack(pack)
+            } else {
+                ResourceLoader.unregisterPackResources(packId)
+                pack.scripts.values.forEach { scriptData ->
+                    if (scriptData.parsed) {
+                        val parseResult = parser.parse(scriptData.content, scriptData.format)
+                        parseResult.script?.let { script ->
+                            DialogueManager.unregisterScript(script.id)
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    fun getAllInstalledPacks(packsDirectory: Path): List<InstalledPackInfo> {
+        return discoverPacks(packsDirectory).map { discovered ->
+            val pack = discovered.pack
+            val isLoaded = loadedPacks.containsKey(pack.manifest.id)
+            val isEnabled = if (isLoaded) isPackEnabled(pack.manifest.id) else false
+            val loadedPack = if (isLoaded) loadedPacks[pack.manifest.id] else null
+            InstalledPackInfo(
+                packId = pack.manifest.id,
+                name = pack.manifest.name,
+                version = pack.manifest.version,
+                author = pack.manifest.author,
+                description = pack.manifest.description,
+                packPath = discovered.packPath,
+                isLoaded = isLoaded,
+                isEnabled = isEnabled,
+                loadErrors = loadedPack?.loadErrors ?: emptyList()
+            )
+        }
+    }
+    
+    fun deletePack(packId: String, packsDirectory: Path): Boolean {
+        return lock.write {
+            val packPath = packPaths[packId] ?: packsDirectory.resolve(packId)
+            if (Files.exists(packPath)) {
+                unloadPack(packId)
+                enabledPacks.remove(packId)
+                try {
+                    Files.walk(packPath).use { stream ->
+                        stream.sorted(Comparator.reverseOrder()).forEach { Files.delete(it) }
+                    }
+                    true
+                } catch (e: Exception) {
+                    false
+                }
+            } else {
+                false
+            }
+        }
+    }
+    
+    fun importPack(sourcePath: Path, packsDirectory: Path): ContentPack? {
+        if (!Files.exists(sourcePath)) {
+            return null
+        }
+        
+        val pack = loader.loadPack(sourcePath)
+        if (!pack.loaded) {
+            return pack
+        }
+        
+        val targetPath = packsDirectory.resolve(pack.manifest.id)
+        try {
+            if (Files.exists(targetPath)) {
+                Files.walk(targetPath).use { stream ->
+                    stream.sorted(Comparator.reverseOrder()).forEach { Files.delete(it) }
+                }
+            }
+            Files.createDirectories(targetPath)
+            Files.walk(sourcePath).use { stream ->
+                stream.forEach { source ->
+                    if (source != sourcePath) {
+                        val target = targetPath.resolve(sourcePath.relativize(source))
+                        if (Files.isDirectory(source)) {
+                            Files.createDirectories(target)
+                        } else {
+                            Files.copy(source, target)
+                        }
+                    }
+                }
+            }
+            return loadPack(targetPath)
+        } catch (e: Exception) {
+            return ContentPack(
+                manifest = pack.manifest,
+                packPath = targetPath,
+                loaded = false,
+                loadErrors = listOf("导入失败: ${e.message}")
+            )
         }
     }
     
@@ -268,5 +379,17 @@ data class VersionCheckResult(
 data class DependencyCheckResult(
     val allSatisfied: Boolean,
     val missingDependencies: List<String>
+)
+
+data class InstalledPackInfo(
+    val packId: String,
+    val name: String,
+    val version: String,
+    val author: String?,
+    val description: String?,
+    val packPath: Path,
+    val isLoaded: Boolean,
+    val isEnabled: Boolean,
+    val loadErrors: List<String>
 )
 
