@@ -132,5 +132,11 @@ class DialogueController(private val script: DialogueScript) {
     }
 
     fun isComplete(): Boolean = currentIndex >= script.entries.size
+    
+    fun getCurrentIndex(): Int = currentIndex
+    
+    fun setCurrentIndex(index: Int) {
+        currentIndex = index.coerceIn(0, script.entries.size)
+    }
 }
 

@@ -10,14 +10,18 @@ import net.star.galgame.dialogue.character.CharacterRenderer
 import net.star.galgame.dialogue.choice.ChoiceRenderer
 import net.star.galgame.dialogue.control.DialogueController
 import net.star.galgame.dialogue.i18n.I18nHelper
+import net.star.galgame.dialogue.save.SaveManager
+import net.star.galgame.dialogue.save.SaveScreen
+import net.star.galgame.dialogue.save.LoadScreen
 import net.star.galgame.dialogue.text.TextRenderer
 import net.star.galgame.dialogue.text.TypewriterEffect
 import org.lwjgl.glfw.GLFW
 
 class DialogueScreen(
-    private val script: DialogueScript
+    private val script: DialogueScript,
+    controller: DialogueController? = null
 ) : Screen(Component.literal("Dialogue")) {
-    private val controller = DialogueController(script)
+    private val controller = controller ?: DialogueController(script)
     private val typewriter = TypewriterEffect("", 0.03f)
     private val characterRenderers = mutableMapOf<String, CharacterRenderer>()
     private val choiceRenderer = ChoiceRenderer()
@@ -25,6 +29,9 @@ class DialogueScreen(
     private var showingHistory = false
     private var historyScrollOffset = 0
 
+    private var lastAutoSaveTime = System.currentTimeMillis()
+    private val autoSaveInterval = 30000L
+    
     init {
         script.entries.forEach { entry ->
             if (entry.characterId != null && !characterRenderers.containsKey(entry.characterId)) {
@@ -61,6 +68,11 @@ class DialogueScreen(
         val currentTime = System.currentTimeMillis()
         val deltaTime = ((currentTime - lastTime) / 1000.0f).coerceIn(0f, 0.1f)
         lastTime = currentTime
+        
+        if (currentTime - lastAutoSaveTime >= autoSaveInterval) {
+            SaveManager.autoSave(script.id, controller)
+            lastAutoSaveTime = currentTime
+        }
 
         if (showingHistory) {
             renderHistory(graphics, mouseX, mouseY)
@@ -357,6 +369,23 @@ class DialogueScreen(
             }
             GLFW.GLFW_KEY_ESCAPE -> {
                 onClose()
+                return true
+            }
+            GLFW.GLFW_KEY_F5 -> {
+                minecraft?.setScreen(SaveScreen(script.id, controller) {
+                    minecraft?.setScreen(this@DialogueScreen)
+                })
+                return true
+            }
+            GLFW.GLFW_KEY_F9 -> {
+                minecraft?.setScreen(LoadScreen(
+                    onLoadComplete = { loadedScreen ->
+                        minecraft?.setScreen(loadedScreen)
+                    },
+                    onCancel = {
+                        minecraft?.setScreen(this@DialogueScreen)
+                    }
+                ))
                 return true
             }
         }
