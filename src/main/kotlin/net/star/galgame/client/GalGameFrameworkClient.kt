@@ -6,19 +6,20 @@ import net.neoforged.fml.ModContainer
 import net.neoforged.fml.common.EventBusSubscriber
 import net.neoforged.fml.common.Mod
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent
-import net.neoforged.neoforge.client.gui.ConfigurationScreen
-import net.neoforged.neoforge.client.gui.IConfigScreenFactory
 import net.star.galgame.GalGameFramework
 
-@Mod(value = GalGameFramework.Companion.MODID, dist = Dist.CLIENT)
-@EventBusSubscriber(modid = GalGameFramework.Companion.MODID, value = Dist.CLIENT)
+@Mod(value = GalGameFramework.MODID, dist = [Dist.CLIENT])
+@EventBusSubscriber(modid = GalGameFramework.MODID, value = [Dist.CLIENT])
 class GalGameFrameworkClient(container: ModContainer) {
     init {
-        container.registerExtensionPoint(IConfigScreenFactory::class.java, ConfigurationScreen::new)
+        // Client initialization
     }
 
-    @SubscribeEvent
-    fun onClientSetup(event: FMLClientSetupEvent) {
-        GalGameFramework.Companion.LOGGER.info("Ciallo～(∠・ω<)⌒☆ Client")
+    companion object {
+        @SubscribeEvent
+        @JvmStatic
+        fun onClientSetup(event: FMLClientSetupEvent) {
+            GalGameFramework.LOGGER.info("Ciallo～(∠・ω<)⌒☆ Client")
+        }
     }
 }
