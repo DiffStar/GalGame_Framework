@@ -24,6 +24,9 @@ import net.star.galgame.dialogue.visual.AnimationType
 import net.star.galgame.dialogue.visual.UIRenderer
 import net.star.galgame.dialogue.visual.UITheme
 import net.star.galgame.dialogue.audio.AudioManager
+import net.star.galgame.dialogue.achievement.AchievementManager
+import net.star.galgame.dialogue.achievement.AchievementNotification
+import net.star.galgame.dialogue.statistics.StatisticsManager
 import org.lwjgl.glfw.GLFW
 
 class DialogueScreen(
@@ -65,6 +68,10 @@ class DialogueScreen(
         animationManager.addAnimation("nameBox", nameBoxAnimation!!)
         dialogueBoxAnimation?.start()
         nameBoxAnimation?.start()
+        StatisticsManager.startGame()
+        AchievementManager.addUnlockListener { achievementId ->
+            AchievementNotification.showNotification(achievementId)
+        }
         updateCurrentDialogue()
     }
 
@@ -100,6 +107,9 @@ class DialogueScreen(
         backgroundManager.update(deltaTime)
         animationManager.update(deltaTime)
         audioManager.update(deltaTime)
+        StatisticsManager.update(deltaTime)
+        AchievementNotification.update(deltaTime)
+        AchievementManager.checkAchievements()
         
         if (currentTime - lastAutoSaveTime >= autoSaveInterval) {
             SaveManager.autoSave(script.id, controller)
@@ -133,6 +143,7 @@ class DialogueScreen(
             }
         }
 
+        AchievementNotification.render(graphics, width, height)
         super.render(graphics, mouseX, mouseY, partialTick)
     }
 
@@ -379,6 +390,7 @@ class DialogueScreen(
                 }
                 if (typewriter.isComplete) {
                     if (controller.next()) {
+                        StatisticsManager.incrementDialogueCount()
                         updateCurrentDialogue()
                     } else {
                         onClose()
@@ -504,6 +516,7 @@ class DialogueScreen(
             } else if (typewriter.isComplete) {
                 audioManager.se.playClick(ResourceLocation.parse("galgame:click"))
                 if (controller.next()) {
+                    StatisticsManager.incrementDialogueCount()
                     updateCurrentDialogue()
                 } else {
                     onClose()
@@ -523,6 +536,7 @@ class DialogueScreen(
     private fun handleChoiceSelection(choiceIndex: Int) {
         audioManager.se.playChoice(ResourceLocation.parse("galgame:choice"))
         if (controller.selectChoice(choiceIndex)) {
+            StatisticsManager.incrementChoiceCount()
             updateCurrentDialogue()
             choiceRenderer.reset()
         }
@@ -540,6 +554,7 @@ class DialogueScreen(
 
     override fun onClose() {
         audioManager.stopAll()
+        StatisticsManager.stopGame()
         super.onClose()
     }
 }

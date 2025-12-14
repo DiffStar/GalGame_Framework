@@ -16,13 +16,17 @@ object GameStateManager {
             currentScene?.let { recordSceneExit(it) }
             currentScene = sceneId
             recordSceneEnter(sceneId)
+            net.star.galgame.dialogue.statistics.StatisticsManager.incrementSceneCount()
         }
     }
 
     fun getCurrentScene(): String? = currentScene
 
     fun setCurrentChapter(chapterId: String) {
-        currentChapter = chapterId
+        if (currentChapter != chapterId) {
+            currentChapter = chapterId
+            net.star.galgame.dialogue.statistics.StatisticsManager.incrementChapterCount()
+        }
     }
 
     fun getCurrentChapter(): String? = currentChapter
