@@ -1,25 +1,25 @@
-buildscript {
-    val props = java.util.Properties().apply {
-        file("gradle.properties").inputStream().use { load(it) }
-    }
-    extra["neoforgeModdevVersion"] = props.getProperty("neoforge_moddev_version") ?: "2.0.124"
-    extra["kotlinVersion"] = props.getProperty("kotlin_version") ?: "2.1.10"
-}
-
 plugins {
     `java-library`
     `maven-publish`
-    id("net.neoforged.moddev") version (extra["neoforgeModdevVersion"] as String)
-    id("org.jetbrains.kotlin.jvm") version (extra["kotlinVersion"] as String)
+    id("net.neoforged.moddev") version "2.0.124"
+    id("org.jetbrains.kotlin.jvm") version "2.1.10"
     idea
 }
+
+val neoforgeModdevVersionFromProps = project.findProperty("neoforge_moddev_version") as String? ?: "2.0.124"
+val kotlinVersionFromProps = project.findProperty("kotlin_version") as String? ?: "2.1.10"
+
 
 tasks.named<Wrapper>("wrapper") {
     distributionType = Wrapper.DistributionType.BIN
 }
 
-version = project.findProperty("mod_version") as String
-group = project.findProperty("mod_group_id") as String
+val modId = project.findProperty("mod_id") as String? ?: "galgame"
+val modVersion = project.findProperty("mod_version") as String? ?: "1.0.0"
+val modGroupId = project.findProperty("mod_group_id") as String? ?: "net.star.galgame"
+
+version = modVersion
+group = modGroupId
 
 repositories {
     maven {
@@ -29,7 +29,7 @@ repositories {
 }
 
 base {
-    archivesName.set(project.findProperty("mod_id") as String)
+    archivesName.set(modId)
 }
 
 java.toolchain.languageVersion.set(JavaLanguageVersion.of(21))
@@ -43,26 +43,26 @@ neoForge {
     }
 
     runs {
-        create("client") {
+        register("client") {
             client()
-            systemProperty("neoforge.enabledGameTestNamespaces", project.findProperty("mod_id") as String)
+            systemProperty("neoforge.enabledGameTestNamespaces", modId)
         }
 
-        create("server") {
+        register("server") {
             server()
             programArgument("--nogui")
-            systemProperty("neoforge.enabledGameTestNamespaces", project.findProperty("mod_id") as String)
+            systemProperty("neoforge.enabledGameTestNamespaces", modId)
         }
 
-        create("gameTestServer") {
+        register("gameTestServer") {
             type = "gameTestServer"
-            systemProperty("neoforge.enabledGameTestNamespaces", project.findProperty("mod_id") as String)
+            systemProperty("neoforge.enabledGameTestNamespaces", modId)
         }
 
-        create("data") {
+        register("data") {
             clientData()
             programArguments.addAll(
-                "--mod", project.findProperty("mod_id") as String,
+                "--mod", modId,
                 "--all",
                 "--output", file("src/generated/resources/").absolutePath,
                 "--existing", file("src/main/resources/").absolutePath
@@ -78,7 +78,7 @@ neoForge {
     }
 
     mods {
-        register(project.findProperty("mod_id") as String) {
+        register(modId) {
             sourceSet(sourceSets.main.get())
         }
     }
@@ -98,7 +98,7 @@ dependencies {
     implementation("thedarkcolour:kotlinforforge:${project.findProperty("kff_version")}")
 }
 
-val generateModMetadata = tasks.register<ProcessResources>("generateModMetadata") {
+tasks.processResources {
     val replaceProperties = mapOf(
         "minecraft_version" to project.findProperty("minecraft_version"),
         "minecraft_version_range" to project.findProperty("minecraft_version_range"),
@@ -114,12 +114,7 @@ val generateModMetadata = tasks.register<ProcessResources>("generateModMetadata"
     filesMatching("**/*.toml") {
         expand(replaceProperties)
     }
-    from("src/main/templates")
-    into("build/generated/sources/modMetadata")
 }
-
-sourceSets.main.get().resources.srcDir(generateModMetadata)
-neoForge.ideSyncTask(generateModMetadata)
 
 publishing {
     publications {
