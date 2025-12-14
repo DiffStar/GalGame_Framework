@@ -4,13 +4,21 @@ import net.star.galgame.contentpack.script.ScriptParser
 import net.star.galgame.contentpack.script.ScriptValidator
 import java.nio.file.Files
 import java.nio.file.Path
-import java.nio.file.Paths
 
 class ContentPackLoader {
     private val parser = ScriptParser()
     private val validator = ScriptValidator()
     
     fun loadPack(packPath: Path): ContentPack {
+        if (!Files.exists(packPath) || !Files.isDirectory(packPath)) {
+            return ContentPack(
+                manifest = createDefaultManifest(),
+                packPath = packPath,
+                loaded = false,
+                loadErrors = listOf("内容包目录不存在或不是目录")
+            )
+        }
+        
         val manifestPath = packPath.resolve("manifest.toml")
         if (!Files.exists(manifestPath)) {
             return ContentPack(
@@ -21,7 +29,17 @@ class ContentPackLoader {
             )
         }
         
-        val manifest = loadManifest(manifestPath)
+        val manifest = try {
+            loadManifest(manifestPath)
+        } catch (e: Exception) {
+            return ContentPack(
+                manifest = createDefaultManifest(),
+                packPath = packPath,
+                loaded = false,
+                loadErrors = listOf("加载清单文件失败: ${e.message}")
+            )
+        }
+        
         val scripts = loadScripts(packPath, manifest.resources.scripts)
         
         val allErrors = mutableListOf<String>()
@@ -122,37 +140,50 @@ class ContentPackLoader {
             return scripts
         }
         
-        Files.walk(scriptsPath).use { stream ->
-            stream.filter { Files.isRegularFile(it) }
-                .forEach { file ->
-                    val format = detectFormat(file)
-                    if (format != null) {
-                        try {
-                            val content = Files.readString(file)
-                            val parseResult = parser.parse(content, format)
-                            
-                            val scriptId = file.fileName.toString().substringBeforeLast(".")
-                            scripts[scriptId] = ScriptData(
-                                id = scriptId,
-                                path = file,
-                                format = format,
-                                content = content,
-                                parsed = parseResult.script != null,
-                                parseErrors = parseResult.errors
-                            )
-                        } catch (e: Exception) {
-                            val scriptId = file.fileName.toString().substringBeforeLast(".")
-                            scripts[scriptId] = ScriptData(
-                                id = scriptId,
-                                path = file,
-                                format = format,
-                                content = "",
-                                parsed = false,
-                                parseErrors = listOf("读取文件错误: ${e.message}")
-                            )
+        try {
+            Files.walk(scriptsPath).use { stream ->
+                stream.filter { Files.isRegularFile(it) }
+                    .forEach { file ->
+                        val format = detectFormat(file)
+                        if (format != null) {
+                            try {
+                                val content = Files.readString(file)
+                                val parseResult = parser.parse(content, format)
+                                
+                                val relativePath = packPath.relativize(file)
+                                val scriptId = relativePath.toString()
+                                    .substringBeforeLast(".")
+                                    .replace("\\", "/")
+                                    .replace("/", ".")
+                                
+                                scripts[scriptId] = ScriptData(
+                                    id = scriptId,
+                                    path = file,
+                                    format = format,
+                                    content = content,
+                                    parsed = parseResult.script != null,
+                                    parseErrors = parseResult.errors
+                                )
+                            } catch (e: Exception) {
+                                val relativePath = packPath.relativize(file)
+                                val scriptId = relativePath.toString()
+                                    .substringBeforeLast(".")
+                                    .replace("\\", "/")
+                                    .replace("/", ".")
+                                
+                                scripts[scriptId] = ScriptData(
+                                    id = scriptId,
+                                    path = file,
+                                    format = format,
+                                    content = "",
+                                    parsed = false,
+                                    parseErrors = listOf("读取文件错误: ${e.message}")
+                                )
+                            }
                         }
                     }
-                }
+            }
+        } catch (e: Exception) {
         }
         
         return scripts
