@@ -15,6 +15,14 @@ import net.star.galgame.dialogue.save.SaveScreen
 import net.star.galgame.dialogue.save.LoadScreen
 import net.star.galgame.dialogue.text.TextRenderer
 import net.star.galgame.dialogue.text.TypewriterEffect
+import net.star.galgame.dialogue.visual.BackgroundManager
+import net.star.galgame.dialogue.visual.BackgroundConfig
+import net.star.galgame.dialogue.visual.BackgroundType
+import net.star.galgame.dialogue.visual.ThemeManager
+import net.star.galgame.dialogue.visual.AnimationManager
+import net.star.galgame.dialogue.visual.AnimationType
+import net.star.galgame.dialogue.visual.UIRenderer
+import net.star.galgame.dialogue.visual.UITheme
 import org.lwjgl.glfw.GLFW
 
 class DialogueScreen(
@@ -31,6 +39,13 @@ class DialogueScreen(
 
     private var lastAutoSaveTime = System.currentTimeMillis()
     private val autoSaveInterval = 30000L
+
+    private val backgroundManager = BackgroundManager()
+    private val themeManager = ThemeManager()
+    private val animationManager = AnimationManager()
+    private val uiRenderer = UIRenderer()
+    private var dialogueBoxAnimation: net.star.galgame.dialogue.visual.UIAnimation? = null
+    private var nameBoxAnimation: net.star.galgame.dialogue.visual.UIAnimation? = null
     
     init {
         script.entries.forEach { entry ->
@@ -42,6 +57,12 @@ class DialogueScreen(
 
     override fun init() {
         super.init()
+        dialogueBoxAnimation = net.star.galgame.dialogue.visual.UIAnimation(AnimationType.FADE_IN, 0.3f)
+        nameBoxAnimation = net.star.galgame.dialogue.visual.UIAnimation(AnimationType.SLIDE_UP, 0.3f)
+        animationManager.addAnimation("dialogueBox", dialogueBoxAnimation!!)
+        animationManager.addAnimation("nameBox", nameBoxAnimation!!)
+        dialogueBoxAnimation?.start()
+        nameBoxAnimation?.start()
         updateCurrentDialogue()
     }
 
@@ -60,14 +81,20 @@ class DialogueScreen(
         if (character != null) {
             characterRenderers[character.id]?.fadeIn()
         }
+
+        dialogueBoxAnimation?.start()
+        nameBoxAnimation?.start()
     }
 
     override fun render(graphics: GuiGraphics, mouseX: Int, mouseY: Int, partialTick: Float) {
-        renderBackground(graphics, mouseX, mouseY, partialTick)
+        backgroundManager.render(graphics, width, height)
 
         val currentTime = System.currentTimeMillis()
         val deltaTime = ((currentTime - lastTime) / 1000.0f).coerceIn(0f, 0.1f)
         lastTime = currentTime
+        
+        backgroundManager.update(deltaTime)
+        animationManager.update(deltaTime)
         
         if (currentTime - lastAutoSaveTime >= autoSaveInterval) {
             SaveManager.autoSave(script.id, controller)
@@ -116,15 +143,22 @@ class DialogueScreen(
 
         val screenWidth = width
         val screenHeight = height
+        val theme = themeManager.getCurrentTheme()
+        val padding = theme.dialogBox.padding
 
         val dialogueBoxY = screenHeight - 120
         val dialogueBoxHeight = 100
-        val padding = 20
-
         val hasChoices = controller.hasChoices() && typewriter.isComplete
 
-        graphics.fill(0, dialogueBoxY, screenWidth, screenHeight, 0x80000000.toInt())
-        graphics.fill(0, dialogueBoxY, screenWidth, dialogueBoxY + 2, 0xFFFFFFFF.toInt())
+        uiRenderer.renderDialogBox(
+            graphics,
+            theme,
+            0,
+            dialogueBoxY,
+            screenWidth,
+            dialogueBoxHeight,
+            dialogueBoxAnimation
+        )
 
         if (character != null) {
             val characterRenderer = characterRenderers[character.id]
@@ -132,13 +166,13 @@ class DialogueScreen(
                 val expression = entry.expression
                 val portraitPath = character.expressions[expression] ?: character.portraitPath
 
-            val portraitWidth = 200
-            val portraitHeight = 300
-            val portraitX = when (entry.position) {
-                CharacterPosition.LEFT -> padding
-                CharacterPosition.CENTER -> screenWidth / 2 - portraitWidth / 2
-                CharacterPosition.RIGHT -> screenWidth - portraitWidth - padding
-            }
+                val portraitWidth = 200
+                val portraitHeight = 300
+                val portraitX = when (entry.position) {
+                    CharacterPosition.LEFT -> padding
+                    CharacterPosition.CENTER -> screenWidth / 2 - portraitWidth / 2
+                    CharacterPosition.RIGHT -> screenWidth - portraitWidth - padding
+                }
 
                 characterRenderer.render(
                     graphics,
@@ -152,13 +186,14 @@ class DialogueScreen(
                 )
 
                 val nameY = dialogueBoxY - 20
-                graphics.drawString(
+                uiRenderer.renderNameBox(
+                    graphics,
                     font,
-                    character.name,
+                    theme,
+                    character.name.string,
                     padding + 10,
                     nameY,
-                    0xFFFFFF,
-                    false
+                    nameBoxAnimation
                 )
             }
         }
@@ -176,7 +211,7 @@ class DialogueScreen(
             textX,
             textY,
             textWidth,
-            0xFFFFFF
+            theme.text.color
         )
 
         if (hasChoices) {
@@ -184,6 +219,23 @@ class DialogueScreen(
             val choiceBoxY = dialogueBoxY - choices.size * 35 - 20
             val choiceBoxX = screenWidth / 2 - 200
             val choiceBoxWidth = 400
+
+            val choiceTheme = UITheme(
+                name = theme.name,
+                dialogBox = theme.choiceBox,
+                text = theme.text,
+                nameBox = theme.nameBox,
+                choiceBox = theme.choiceBox,
+                continueIndicator = theme.continueIndicator
+            )
+            uiRenderer.renderDialogBox(
+                graphics,
+                choiceTheme,
+                choiceBoxX,
+                choiceBoxY,
+                choiceBoxWidth,
+                choices.size * 35 + 10
+            )
 
             choiceRenderer.render(
                 graphics,
@@ -210,13 +262,14 @@ class DialogueScreen(
                     Component.literal("点击继续...")
                 }
             }
-            graphics.drawString(
+            uiRenderer.renderText(
+                graphics,
                 font,
+                theme,
                 continueText,
                 screenWidth - font.width(continueText) - padding,
                 continueY,
-                0xCCCCCC,
-                false
+                font.width(continueText)
             )
         }
     }
