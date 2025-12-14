@@ -7,6 +7,7 @@ import net.minecraft.client.input.MouseButtonEvent
 import net.minecraft.network.chat.Component
 import net.minecraft.resources.ResourceLocation
 import net.star.galgame.dialogue.character.CharacterRenderer
+import net.star.galgame.dialogue.choice.ChoiceRenderer
 import net.star.galgame.dialogue.control.DialogueController
 import net.star.galgame.dialogue.i18n.I18nHelper
 import net.star.galgame.dialogue.text.TextRenderer
@@ -19,6 +20,7 @@ class DialogueScreen(
     private val controller = DialogueController(script)
     private val typewriter = TypewriterEffect("", 0.03f)
     private val characterRenderers = mutableMapOf<String, CharacterRenderer>()
+    private val choiceRenderer = ChoiceRenderer()
     private var lastTime = System.currentTimeMillis()
     private var showingHistory = false
     private var historyScrollOffset = 0
@@ -64,6 +66,27 @@ class DialogueScreen(
             renderHistory(graphics, mouseX, mouseY)
         } else {
             renderDialogue(graphics, mouseX, mouseY, deltaTime)
+            if (controller.hasChoices() && typewriter.isComplete) {
+                val choices = controller.getVisibleChoices()
+                val screenWidth = width
+                val screenHeight = height
+                val dialogueBoxY = screenHeight - 120
+                val choiceBoxY = dialogueBoxY - choices.size * 35 - 20
+                val choiceBoxX = screenWidth / 2 - 200
+                val choiceBoxWidth = 400
+
+                val hoveredIndex = choiceRenderer.getChoiceAt(
+                    choices,
+                    choiceBoxX,
+                    choiceBoxY,
+                    choiceBoxWidth,
+                    mouseX,
+                    mouseY
+                )
+                if (hoveredIndex != null) {
+                    choiceRenderer.setHovered(hoveredIndex)
+                }
+            }
         }
 
         super.render(graphics, mouseX, mouseY, partialTick)
@@ -77,6 +100,7 @@ class DialogueScreen(
 
         typewriter.update(deltaTime)
         characterRenderers.values.forEach { it.updateFade() }
+        choiceRenderer.update(deltaTime)
 
         val screenWidth = width
         val screenHeight = height
@@ -84,6 +108,8 @@ class DialogueScreen(
         val dialogueBoxY = screenHeight - 120
         val dialogueBoxHeight = 100
         val padding = 20
+
+        val hasChoices = controller.hasChoices() && typewriter.isComplete
 
         graphics.fill(0, dialogueBoxY, screenWidth, screenHeight, 0x80000000.toInt())
         graphics.fill(0, dialogueBoxY, screenWidth, dialogueBoxY + 2, 0xFFFFFFFF.toInt())
@@ -141,7 +167,23 @@ class DialogueScreen(
             0xFFFFFF
         )
 
-        if (typewriter.isComplete) {
+        if (hasChoices) {
+            val choices = controller.getVisibleChoices()
+            val choiceBoxY = dialogueBoxY - choices.size * 35 - 20
+            val choiceBoxX = screenWidth / 2 - 200
+            val choiceBoxWidth = 400
+
+            choiceRenderer.render(
+                graphics,
+                font,
+                choices,
+                choiceBoxX,
+                choiceBoxY,
+                choiceBoxWidth,
+                mouseX,
+                mouseY
+            )
+        } else if (typewriter.isComplete) {
             val continueY = screenHeight - 30
             val continueText = if (controller.isComplete()) {
                 if (I18nHelper.hasTranslation("galgame.dialogue.click_close")) {
@@ -249,6 +291,9 @@ class DialogueScreen(
 
         when (keyCode) {
             GLFW.GLFW_KEY_SPACE, GLFW.GLFW_KEY_ENTER -> {
+                if (controller.hasChoices() && typewriter.isComplete) {
+                    return true
+                }
                 if (typewriter.isComplete) {
                     if (controller.next()) {
                         updateCurrentDialogue()
@@ -259,6 +304,42 @@ class DialogueScreen(
                     typewriter.skip()
                 }
                 return true
+            }
+            GLFW.GLFW_KEY_1 -> {
+                if (controller.hasChoices() && typewriter.isComplete) {
+                    handleChoiceSelection(0)
+                    return true
+                }
+            }
+            GLFW.GLFW_KEY_2 -> {
+                if (controller.hasChoices() && typewriter.isComplete) {
+                    handleChoiceSelection(1)
+                    return true
+                }
+            }
+            GLFW.GLFW_KEY_3 -> {
+                if (controller.hasChoices() && typewriter.isComplete) {
+                    handleChoiceSelection(2)
+                    return true
+                }
+            }
+            GLFW.GLFW_KEY_4 -> {
+                if (controller.hasChoices() && typewriter.isComplete) {
+                    handleChoiceSelection(3)
+                    return true
+                }
+            }
+            GLFW.GLFW_KEY_5 -> {
+                if (controller.hasChoices() && typewriter.isComplete) {
+                    handleChoiceSelection(4)
+                    return true
+                }
+            }
+            GLFW.GLFW_KEY_6 -> {
+                if (controller.hasChoices() && typewriter.isComplete) {
+                    handleChoiceSelection(5)
+                    return true
+                }
             }
             GLFW.GLFW_KEY_LEFT_SHIFT, GLFW.GLFW_KEY_RIGHT_SHIFT -> {
                 controller.fastForward()
@@ -298,7 +379,29 @@ class DialogueScreen(
         }
 
         if (event.button() == 0) {
-            if (typewriter.isComplete) {
+            if (controller.hasChoices() && typewriter.isComplete) {
+                val choices = controller.getVisibleChoices()
+                val screenWidth = width
+                val screenHeight = height
+                val dialogueBoxY = screenHeight - 120
+                val choiceBoxY = dialogueBoxY - choices.size * 35 - 20
+                val choiceBoxX = screenWidth / 2 - 200
+                val choiceBoxWidth = 400
+
+                val choiceIndex = choiceRenderer.getChoiceAt(
+                    choices,
+                    choiceBoxX,
+                    choiceBoxY,
+                    choiceBoxWidth,
+                    event.x().toInt(),
+                    event.y().toInt()
+                )
+
+                if (choiceIndex != null) {
+                    handleChoiceSelection(choiceIndex)
+                    return true
+                }
+            } else if (typewriter.isComplete) {
                 if (controller.next()) {
                     updateCurrentDialogue()
                 } else {
@@ -311,6 +414,13 @@ class DialogueScreen(
         }
 
         return super.mouseClicked(event, captured)
+    }
+
+    private fun handleChoiceSelection(choiceIndex: Int) {
+        if (controller.selectChoice(choiceIndex)) {
+            updateCurrentDialogue()
+            choiceRenderer.reset()
+        }
     }
 
     override fun mouseScrolled(mouseX: Double, mouseY: Double, scrollX: Double, scrollY: Double): Boolean {
